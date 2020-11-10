@@ -154,6 +154,7 @@ plot(hh_range_rast)
 
 ### that's way more map space than we need!  raster::trim() can trim it to remove
 ### the whitespace
+##trim(): the smallers rectangular area that there are non-NA
 hh_range_rast <- hh_range_rast %>%
   raster::trim()
 

@@ -60,6 +60,8 @@ moz_eez_sf <- read_sf(here('_spatial/moz_eez/se_afr_eez.shp')) %>%
   filter(id == 5)
 ```
 
+Raster is a gird of numeric value, so it can be used and do operations as it was a vector. The difference is that it has a spacial component associated to it
+
 # Basic raster math
 
 Since rasters are just a grid of numeric values, essentially a matrix, we can do the same operations on a raster as we can with a basic vector or matrix.  Here we'll walk through some simple but useless examples based on the rasters we already created.
@@ -70,6 +72,7 @@ vec <- 1:10
 vec * 2  ### multiply by a scalar
 vec + 20 ### add a scalar
 
+##running operation to all the raster. The operation is applied to every singel cell in the raster.
 eez_rast <- raster(here('_spatial/se_afr_eez_6933.tif'))
 plot(eez_rast)
 plot(eez_rast * 2)
@@ -94,6 +97,7 @@ unique(x) ### each number corresponds to an EEZ; Mozambique is 5
 ss_rast2 <- ss_rast ### copy it over
 
 ### keep all shark probabilities in Moz, but set all outside the Moz EEZ to 0
+##(values that are not = to 5 which means that they are not mozambique and values that are not NAs and set them to 0)
 values(ss_rast2)[values(eez_rast != 5) & !is.na(values(ss_rast))] <- 0
 plot(ss_rast2)
 
@@ -110,6 +114,7 @@ How can you use this basic raster math?
 
 ```{r}
 hcaf_rast <- raster(here('_spatial/hcaf_rast_6933.tif'))
+##deviding by the max value to get values form 0-1
 hcaf_rescaled <- hcaf_rast / maxValue(hcaf_rast)
 plot_rast(hcaf_rescaled, moz_eez_sf)
 ```
@@ -124,6 +129,8 @@ The `calc` function is handy for more complex calculations.  It is especially us
 rast_files <- list.files(here('_spatial'), pattern = '_6933.tif', full.names = TRUE)
 rast_stack <- stack(rast_files)
 plot(rast_stack)
+
+##to get one plot from the list use [[1]] or the number you want tot plot. To access a list you use double square braquets
 
 ### or tell it which rasters already in memory to include in the stack.
 rast_stack <- stack(eez_rast, ss_rast, hcaf_rescaled)
@@ -159,6 +166,7 @@ plot_rast(port_dist_rast, moz_eez_sf, palette = 'Berlin') +
 ```{r}
 ### a vector: 
 ###    from  to    class
+##classification matrix saying 0 to 0.33 is a 1 low probability, etc..
 m <- c(0.00, 0.33, 1,    
        0.33, 0.67, 2,    
        0.67, 1.00, 3)
@@ -208,7 +216,7 @@ where $P_x$ is probability of finding shark type $x$, $\alpha$ is how strongly s
 Then we can break the priority into quantiles, and highlight the best 10% of area and the worst 10% of area.
 
 ```{r}
-cellid_rast <- raster(eez_rast) %>%
+cellid_rast <- raster(eez_rast) %>% ##creats a blank raster with the same parametes as the eez_rast
   setValues(1:ncell(eez_rast))
 
 ### load the hammerhead and spp richness rasters from the last script...
@@ -220,11 +228,11 @@ shark_df <- data.frame(cell_id  = values(cellid_rast),
                        p_hhead  = values(hh_rast),
                        spp_rich = values(spp_rich_rast),
                        eez      = values(eez_rast),
-                       d_port   = values(port_dist_rast) / 1000) %>%
+                       d_port   = values(port_dist_rast) / 1000) %>% ##cahnging from m to km
   ### now we can drop any cells outside the Mozambique EEZ (id = 5)
   filter(eez == 5)
 
-### Now lets build our model
+### Now lets build our model. This calculations are easier to do in a df than a raster
 alpha <- 1; beta <- 1; a <- 2; b <- 1000; c <- 2e5
 model_df <- shark_df %>%
   mutate(priority_spp = p_silky * p_hhead,
@@ -232,7 +240,7 @@ model_df <- shark_df %>%
          cost_fxn     = a * d_port^2 - b * d_port + c) %>%
   mutate(priority = priority_spp * rel_spp_rich^alpha / cost_fxn^beta,
          pri_qtile = ntile(priority, n = 10))
-
+##cost model results
 ggplot(model_df, aes(x = d_port, y = cost_fxn)) +
   geom_point()
 
@@ -242,9 +250,11 @@ plot_rast(log10(model_map), moz_eez_sf, palette = 'viridis')
 ```
 
 ``` {r}
+## birnging the df back into raster to plot
 x <- model_df %>%
   filter(pri_qtile %in% c(1, 10))
 priority_map <- subs(cellid_rast, x, by = 'cell_id', which = 'pri_qtile')
+
 plot_rast(priority_map, moz_eez_sf, palette = 'RdYlGn', outline = 'yellow') +
   geom_point(data = port_df, aes(x, y), shape = 21, color = 'black', fill = 'white', size = 2)
 ```
@@ -259,7 +269,7 @@ The rasterToPolygons function returns an old school Spatial (`sp`) object, so we
 ``` {r}
 ### load the half-degree silky shark data
 ss_rast_hcaf <- raster(here('_spatial/silkyshark_rast.tif'))
-ss_poly_sp <- raster::rasterToPolygons(ss_rast_hcaf, dissolve = FALSE)
+ss_poly_sp <- raster::rasterToPolygons(ss_rast_hcaf, dissolve = FALSE) ## = T conects contiguos polygons
 ss_poly_sf <- st_as_sf(ss_poly_sp)
 
 ggplot(ss_poly_sf) +
